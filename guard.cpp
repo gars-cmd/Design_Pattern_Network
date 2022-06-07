@@ -28,8 +28,6 @@ void* GuarMod(void* index)
 {
   guardian guard;
   std::cout << "guard-> working" << std::endl;
-  sleep(3);
-  std::cout << "guard -> resting" << std::endl;
   std::cout <<index<< std::endl;
   
   return (int*)1; 
@@ -58,3 +56,5 @@ int main (int argc, char *argv[])
 
   return 0;
 }
+
+// we can use guard to guard strtok

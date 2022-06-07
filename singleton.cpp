@@ -69,3 +69,5 @@ int main (int argc, char *argv[])
   }
   return 0;
 }
+
+// we can use guard to guard the strtok

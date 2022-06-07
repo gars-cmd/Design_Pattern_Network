@@ -30,7 +30,7 @@ void *get_in_addr(struct sockaddr *sa)
 
 int main(int argc, char *argv[])
 {
-  int sockfd, numbytes;
+  int sockfd, numbytes ;
   char buf[MAXDATASIZE];
   struct addrinfo hints, *servinfo, *p;
   int rv;
@@ -83,19 +83,18 @@ int main(int argc, char *argv[])
   printf("DEBUG:client: connecting to %s\n", s);
 
   freeaddrinfo(servinfo); // all done with this structure
-  printf("DEBUG:enter a string for the server >");
-  scanf("%s",&buf);
+// ############################## TEST-1############################## 
+  printf("TEST:send [hello] > server\n");
+  memset(buf, 0, MAXDATASIZE);
+  memcpy(buf, "hello", 6);
   // printf("buf = %s\n", buf);
   if ((numbytes = send(sockfd, buf, 1024, 0)) == -1)
   {
-    perror("send...");
+    perror("send1...");
     exit(1);
   }
-
   else
   {
-
-    printf("the data %s was sent\n",buf);
     fflush(stdout);
   }
   memset(buf, 0, MAXDATASIZE);
@@ -106,9 +105,11 @@ int main(int argc, char *argv[])
   }
   else
   {
+    printf("TEST: client  < [%s] server\n",buf);
     buf[numbytes] = '\0';
-    printf("OUTPUT:%s\n", buf);
+    printf("TEST: we received %s and the expected result is  %s\n", buf,"IFMMP");
     close(sockfd);
   }
+
 }
 

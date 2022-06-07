@@ -11,21 +11,109 @@
 #include <netinet/in.h>                                 
 #include <netdb.h>                                      
 #include <arpa/inet.h>  
+#include <limits.h>
 #include <signal.h>
-// initialize var
 
+pthread_mutex_t mutex_q;
+pthread_cond_t cond_q;
 pthread_mutex_t mutex;
 pthread_cond_t cond_next1;
 pthread_cond_t cond_next2;
 pthread_cond_t cond_next3;
-
-
 queue* q1;
 queue* q2;
 queue* q3;
 
 #define PORT "3490" 
 #define BACKLOG 10 
+
+#define QUEUE_EMPTY INT_MIN
+
+/* The function to create the queue */
+queue* create_queue()
+{
+  queue* myqueue = malloc(sizeof(queue));
+  myqueue->queue_size = 0;	
+  myqueue->head = NULL;
+  myqueue->tail = NULL;
+  return myqueue;
+}
+
+
+/* the function to add an element to the queue */ 
+void enqueue(queue *myqueue , void* value) 
+{
+  pthread_mutex_lock(&mutex_q);
+  //check for empty queue
+  if (myqueue->head == NULL) {
+    myqueue->head = malloc(sizeof(node));
+    myqueue->head->value = value;
+    myqueue->tail = myqueue->head;
+  }
+  else {
+    myqueue->tail->next = malloc(sizeof(node));
+    myqueue->tail = myqueue->tail->next;
+    myqueue->tail->value = value;
+  }
+
+  myqueue->tail->next = NULL;
+  myqueue->queue_size++;
+
+  pthread_mutex_unlock(&mutex_q);
+  pthread_cond_signal(&cond_q);
+  // printf("a val was enqueued\n");
+}
+
+/* return the element at the top of the queue */
+void* queue_pick(queue *myqueue)
+{
+  if (myqueue->head == NULL)
+  {
+    // printf("DEBUG:the queue is empty \n");
+    return NULL;
+  }
+
+  return myqueue->head->value;
+}
+
+/* delete the first element of the queue and return it */
+void* dequeue (queue *myqueue)
+{
+  pthread_mutex_lock(&mutex_q);
+  /* check for empty queue */
+  while (myqueue->head == NULL) {
+    printf("DEBUG : queue : waiting for insertion ...");
+    pthread_cond_wait(&cond_q, &mutex_q);	
+  }
+
+  node *tmp = myqueue->head;
+  void* res = tmp->value;
+  myqueue->head = myqueue->head->next;
+
+  /* if there is one element on the queue , the queue is now empty */
+  if (myqueue->head == NULL) {
+    myqueue->tail = NULL;
+    printf("DEBUG: the queue is now empty \n");
+  }
+  free(tmp);
+  myqueue->queue_size--;
+  pthread_mutex_unlock(&mutex_q);
+  return res;
+}
+
+void clear_queue(queue *myqueue)
+{
+  node *tmp = myqueue->head;
+  while (myqueue->head != NULL) {
+    dequeue(myqueue);
+  }
+  myqueue->queue_size = 0;
+  myqueue->head = myqueue->tail = NULL;
+}
+// initialize variables 
+
+
+
 void *get_in_addr(struct sockaddr *sa)
 {
   if (sa->sa_family == AF_INET) {
@@ -70,7 +158,7 @@ void destroyAO(AO* ao){
 
 // function to transform a string according to the ceaser cipher
 char* Ccipher(char *string){
-  printf("cipher was called\n");
+  // printf("cipher was called\n");
 
   int i = 0;
   int size = strlen(string);
@@ -95,7 +183,7 @@ char* Ccipher(char *string){
     }
     i++;
   }
-  printf("after cipher is %s\n",newstring);
+  // printf("after cipher is %s\n",newstring);
   return newstring; 
 }
 
@@ -103,7 +191,7 @@ char* Ccipher(char *string){
 // function to cast up-char to down-char and reverse  
 char * up_DWN(char* string){
 
-  printf("upDwn was called\n");
+  // printf("upDwn was called\n");
   int i = 0;
   int size = strlen(string);
   char* newstring = malloc(sizeof(size));
@@ -120,7 +208,7 @@ char * up_DWN(char* string){
       c = string[i];
     }
     newstring[i] = c;
-    printf("for now the string is equal %s\n",newstring);
+    // printf("for now the string is equal %s\n",newstring);
     i++;
   }
   return newstring;
@@ -133,25 +221,25 @@ char * up_DWN(char* string){
 
 void handler_connect(int *client){
   // pthread_mutex_lock(&mutex);
-  printf("new connection to handle\n");
+  printf("DEBUG:new connection to handle\n");
 
   char buff[1024];
   memset(buff, 0, 1024);
   int socket = *client;
   int recept = recv(socket , buff , 1024 , 0);
-  printf("recept = %d\n",recept);
+  // printf("recept = %d\n",recept);
   if (recept == -1) {
     perror("error occur when recv\n");
-    EXIT_FAILURE;
+    exit(EXIT_FAILURE);
   }
   buff[recept] = '\0';
-  printf("the data to enqueue = %s \n",buff);
+  // printf("the data to enqueue = %s \n",buff);
   packet* pkt = malloc(sizeof(packet));
   pkt->string = calloc(sizeof(buff) , 1);
   pkt->string = buff;
   pkt->socket = &socket;
   enqueue(q1, pkt);
-  printf("the data %s was enqueue in q1\n",buff);
+  // printf("the data %s was enqueue in q1\n",buff);
   pthread_cond_signal(&cond_next1);
   // pthread_mutex_unlock(&mutex);
 }
@@ -168,20 +256,20 @@ typedef struct pair{
 void handler (pair * pair_n){
   while (1) {
     while (pair_n->index == 1 && q1->head == NULL) {
-      printf("the queue q%d is locked\n",pair_n->index);
+      printf("DEBUG:the queue q%d is locked\n",pair_n->index);
       pthread_cond_wait(&cond_next1 , &mutex);
     }
     while (pair_n->index == 2 && q2->head == NULL) {
-      printf("the queue q%d is locked\n",pair_n->index);
+      printf("DEBUG:the queue q%d is locked\n",pair_n->index);
       pthread_cond_wait(&cond_next2 , &mutex);
     } 
     while (pair_n->index == 3 && q3->head == NULL) {
-      printf("the queue q%d is locked\n",pair_n->index);
+      printf("DEBUG:the queue q%d is locked\n",pair_n->index);
       pthread_cond_wait(&cond_next3 , &mutex);
     }
-    printf("the AO that running is %d\n",pair_n->index);
+    printf("DEBUG:the AO that running is %d\n",pair_n->index);
     if (pair_n->index == 3){
-      printf("case of last AO\n");
+      // printf("case of last AO\n");
       char* ans = ((packet*)pair_n->ao->myqueue->head->value)->string;
       int client = *((packet*)pair_n->ao->myqueue->head->value)->socket; 
 
@@ -191,16 +279,16 @@ void handler (pair * pair_n){
       }
       else{
         free(pair_n->ao->myqueue->head->value);
-        printf("the send succeed \n");
+        // printf("the send succeed \n");
         dequeue(pair_n->ao->myqueue);
       }
     }
     else{
 
-      printf("the active object %d is running\n",pair_n->index);
+      printf("DEBUG:the active object %d is running\n",pair_n->index);
       // extract the  string from the packet in the node of the queue   
       char * string = ((packet*)pair_n->ao->myqueue->head->value)->string; 
-      printf("the data in head is %s \n",string);
+      // printf("the data in head is %s \n",string);
       char * ans = pair_n->ao->start_func(string);
 
       // prepare the next packet to forward to q_n+1
@@ -211,16 +299,16 @@ void handler (pair * pair_n){
       // enqueue the new packet to the next queue 
       pair_n->ao->end_func(pair_n->next_queue , for_pakt);
       char* check = ((packet*)pair_n->next_queue->head->value)->string; 
-      printf("the head of the next queue is now %s \n",check);
+      // printf("the head of the next queue is now %s \n",check);
 
       free(pair_n->ao->myqueue->head->value);
       dequeue(pair_n->ao->myqueue);
       if (pair_n->index == 1) {
         pthread_cond_signal(&cond_next2);
-        printf("free2\n");
+        // printf("free2\n");
       }else {
         pthread_cond_signal(&cond_next3);
-        printf("free3\n");
+        // printf("free3\n");
       } 
     }
   }
@@ -258,9 +346,6 @@ int main (int argc, char *argv[])
   pair3->ao = ao3;
   pair3->next_queue = NULL;
   pair3->index = 3;
-
-
-
 
   pthread_create(&ao1->th_t, NULL, handler,pair1);
   pthread_create(&ao2->th_t, NULL, handler,pair2);
@@ -329,7 +414,7 @@ int main (int argc, char *argv[])
     exit(1);
   }
 
-  printf("server: waiting for connections...\n");
+  printf("DEBUG:server: waiting for connections...\n");
 
   while(1) {  // main accept() loop
     sin_size = sizeof their_addr;
@@ -351,7 +436,7 @@ int main (int argc, char *argv[])
     inet_ntop(their_addr.ss_family,
         get_in_addr((struct sockaddr *)&their_addr),
         s, sizeof s);
-    printf("server: got connection from %s\n", s);
+    printf("DEBUG:server: got connection from %s\n", s);
   }
 
 

@@ -12,11 +12,12 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 #define PORT "3490" // the port client will be connecting to
 
 #define MAXDATASIZE 1024 // max number of bytes we can get at once
-
+int receive(int sockfd);
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
 {
@@ -83,8 +84,12 @@ int main(int argc, char *argv[])
   printf("DEBUG:client: connecting to %s\n", s);
 
   freeaddrinfo(servinfo); // all done with this structure
-  printf("DEBUG:enter a string for the server >");
-  scanf("%s",&buf);
+  pthread_t threadC;
+  send(sockfd, "new client connected", 20,0);
+  while (1) {
+  pthread_create(&threadC, NULL, receive, sockfd);
+  // printf("\nDEBUG:enter a string for the server >");
+  scanf("%[^\n]%*c",&buf);
   // printf("buf = %s\n", buf);
   if ((numbytes = send(sockfd, buf, 1024, 0)) == -1)
   {
@@ -95,20 +100,42 @@ int main(int argc, char *argv[])
   else
   {
 
-    printf("the data %s was sent\n",buf);
+    // printf("the data %s was sent\n",buf);
     fflush(stdout);
   }
-  memset(buf, 0, MAXDATASIZE);
-  if ((numbytes = recv(sockfd, buf, MAXDATASIZE, 0)) == -1)
-  {
-    perror("ERROR:recv...");
+  // memset(buf, 0, MAXDATASIZE);
+  // if ((numbytes = recv(sockfd, buf, MAXDATASIZE, 0)) == -1)
+  // {
+  //   perror("ERROR:recv...");
+  //   exit(1);
+  // }
+  // else
+  // {
+  //   buf[numbytes] = '\0';
+  //   printf("OUTPUT:%s\n", buf);
+  //   close(sockfd);
+  // }
+}
+}
+
+
+int receive(int sockfd){
+  while (1) {
+  char buf2[1024];
+  memset(buf2 , 0 ,  MAXDATASIZE);
+  int numbytes = recv(sockfd , buf2 , MAXDATASIZE , 0);
+  if (numbytes == -1) {
+    perror("receive");
     exit(1);
+  }else {
+    buf2[numbytes] = '\0';
+    int size = strlen(buf2);
+    if (size>0) {
+      printf("\nOUTPUT:%s\n",buf2);
+    }
   }
-  else
-  {
-    buf[numbytes] = '\0';
-    printf("OUTPUT:%s\n", buf);
-    close(sockfd);
   }
 }
+
+
 
